@@ -195,22 +195,19 @@ def fetch_streams(session, activity_id):
 
 # ── Formatting helpers ─────────────────────────────────────────────────────────
 
-def meters_to_miles(m):
-    return m / 1609.344
-
-def meters_to_feet(m):
-    return m * 3.28084
+def meters_to_km(m):
+    return m / 1000
 
 def seconds_to_hms(s):
     h, rem = divmod(s, 3600)
     m, sec = divmod(rem, 60)
     return f"{h}h {m:02d}m {sec:02d}s" if h else f"{m}m {sec:02d}s"
 
-def pace_per_mile(distance_m, time_s):
+def pace_per_km(distance_m, time_s):
     if not distance_m:
         return "N/A"
-    spm = time_s / meters_to_miles(distance_m)
-    return f"{int(spm // 60)}:{int(spm % 60):02d}/mi"
+    spm = time_s / meters_to_km(distance_m)
+    return f"{int(spm // 60)}:{int(spm % 60):02d}/km"
 
 def format_elapsed(total_seconds):
     m, s = divmod(total_seconds, 60)
@@ -256,7 +253,7 @@ def process_streams(raw):
         if hrs:
             mark["heartrate"] = hrs[i]
         if alts:
-            mark["elevation_ft"] = round(alts[i] * 3.28084, 1)
+            mark["elevation_m"] = round(alts[i], 1)
         ten_sec.append(mark)
         t += 10
 
@@ -271,7 +268,7 @@ def process_streams(raw):
         if ei > si and dists:
             dist_m = dists[ei] - dists[si]
             time_s = times[ei] - times[si]
-            pace = pace_per_mile(dist_m, time_s) if dist_m > 0 else "N/A"
+            pace = pace_per_km(dist_m, time_s) if dist_m > 0 else "N/A"
         else:
             pace = "N/A"
 
@@ -295,11 +292,11 @@ def parse_activity(a):
         "name":                a.get("name", "Untitled"),
         "date":                date.strftime("%Y-%m-%d"),
         "day_of_week":         date.strftime("%A"),
-        "distance_miles":      round(meters_to_miles(dist), 2),
+        "distance_km":         round(meters_to_km(dist), 2),
         "moving_time":         seconds_to_hms(time_s),
         "moving_time_seconds": time_s,
-        "avg_pace":            pace_per_mile(dist, time_s),
-        "elevation_gain_ft":   round(meters_to_feet(elev)),
+        "avg_pace":            pace_per_km(dist, time_s),
+        "elevation_gain_m":    round(elev),
         "avg_heart_rate":      a.get("average_heartrate"),
         "max_heart_rate":      a.get("max_heartrate"),
         "sport_type":          a.get("sport_type", "Run"),
@@ -307,22 +304,22 @@ def parse_activity(a):
     }
 
 def compute_summary(runs):
-    total_miles = sum(r["distance_miles"] for r in runs)
-    total_s     = sum(r["moving_time_seconds"] for r in runs)
-    total_elev  = sum(r["elevation_gain_ft"] for r in runs)
-    hr_runs     = [r for r in runs if r["avg_heart_rate"]]
-    avg_hr      = round(sum(r["avg_heart_rate"] for r in hr_runs) / len(hr_runs)) if hr_runs else None
-    longest     = max(runs, key=lambda r: r["distance_miles"])
+    total_km   = sum(r["distance_km"] for r in runs)
+    total_s    = sum(r["moving_time_seconds"] for r in runs)
+    total_elev = sum(r["elevation_gain_m"] for r in runs)
+    hr_runs    = [r for r in runs if r["avg_heart_rate"]]
+    avg_hr     = round(sum(r["avg_heart_rate"] for r in hr_runs) / len(hr_runs)) if hr_runs else None
+    longest    = max(runs, key=lambda r: r["distance_km"])
     return {
-        "total_runs":          len(runs),
-        "total_miles":         round(total_miles, 1),
-        "total_time":          seconds_to_hms(total_s),
-        "total_elevation_ft":  round(total_elev),
-        "avg_miles_per_run":   round(total_miles / len(runs), 2),
-        "avg_pace_overall":    pace_per_mile(total_miles * 1609.344, total_s),
-        "avg_heart_rate":      avg_hr,
-        "longest_run_miles":   longest["distance_miles"],
-        "longest_run_date":    longest["date"],
+        "total_runs":        len(runs),
+        "total_km":          round(total_km, 1),
+        "total_time":        seconds_to_hms(total_s),
+        "total_elevation_m": round(total_elev),
+        "avg_km_per_run":    round(total_km / len(runs), 2),
+        "avg_pace_overall":  pace_per_km(total_km * 1000, total_s),
+        "avg_heart_rate":    avg_hr,
+        "longest_run_km":    longest["distance_km"],
+        "longest_run_date":  longest["date"],
     }
 
 
@@ -338,16 +335,16 @@ def build_text(runs, summary, generated_at, period_label):
         "SUMMARY",
         "-" * 40,
         f"Total runs:        {summary['total_runs']}",
-        f"Total distance:    {summary['total_miles']} miles",
+        f"Total distance:    {summary['total_km']} km",
         f"Total time:        {summary['total_time']}",
-        f"Total elevation:   {summary['total_elevation_ft']} ft",
-        f"Avg distance/run:  {summary['avg_miles_per_run']} miles",
+        f"Total elevation:   {summary['total_elevation_m']} m",
+        f"Avg distance/run:  {summary['avg_km_per_run']} km",
         f"Avg pace:          {summary['avg_pace_overall']}",
     ]
     if summary.get("avg_heart_rate"):
         lines.append(f"Avg heart rate:    {summary['avg_heart_rate']} bpm")
     lines += [
-        f"Longest run:       {summary['longest_run_miles']} miles ({summary['longest_run_date']})",
+        f"Longest run:       {summary['longest_run_km']} km ({summary['longest_run_date']})",
         "",
         "INDIVIDUAL RUNS",
         "-" * 40,
@@ -358,10 +355,10 @@ def build_text(runs, summary, generated_at, period_label):
         lines += [
             f"Run {i}: {r['name']}",
             f"  Date:          {r['day_of_week']}, {r['date']}",
-            f"  Distance:      {r['distance_miles']} miles",
+            f"  Distance:      {r['distance_km']} km",
             f"  Moving Time:   {r['moving_time']}",
             f"  Avg Pace:      {r['avg_pace']}",
-            f"  Elevation:     {r['elevation_gain_ft']} ft",
+            f"  Elevation:     {r['elevation_gain_m']} m",
         ]
         if r["avg_heart_rate"]:
             lines.append(f"  Avg HR:        {int(r['avg_heart_rate'])} bpm")
@@ -378,8 +375,8 @@ def build_text(runs, summary, generated_at, period_label):
 
         if streams and streams.get("ten_second_marks"):
             marks    = streams["ten_second_marks"]
-            has_hr   = any("heartrate"    in m for m in marks)
-            has_elev = any("elevation_ft" in m for m in marks)
+            has_hr   = any("heartrate"   in m for m in marks)
+            has_elev = any("elevation_m" in m for m in marks)
 
             if has_hr or has_elev:
                 lines.append("")
@@ -398,8 +395,8 @@ def build_text(runs, summary, generated_at, period_label):
                         hr_val = mark.get("heartrate")
                         row += f"   {hr_val:3d} bpm" if hr_val is not None else "       ---"
                     if has_elev:
-                        el_val = mark.get("elevation_ft")
-                        row += f"   {el_val:7.1f} ft" if el_val is not None else "          ---"
+                        el_val = mark.get("elevation_m")
+                        row += f"   {el_val:7.1f} m" if el_val is not None else "         ---"
                     lines.append(row)
 
         lines.append("")
@@ -487,11 +484,11 @@ def main():
     if first_run:
         label = "Rebuilt" if (hist_missing and last_fetch != 0) else "Saved"
         print(f"Fetched {len(runs)} runs ({len(runs_with_streams)} with stream detail).")
-        print(f"  Total distance:  {summary['total_miles']} miles")
+        print(f"  Total distance:  {summary['total_km']} km")
         print(f"  {label} to:       historical_running_data.txt")
     else:
         print(f"Fetched {len(runs)} new run(s).")
-        print(f"  Total distance:  {summary['total_miles']} miles")
+        print(f"  Total distance:  {summary['total_km']} km")
         print(f"  Avg pace:        {summary['avg_pace_overall']}")
         print(f"  Saved to:        running_data.txt")
     print()
