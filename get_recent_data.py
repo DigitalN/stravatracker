@@ -480,13 +480,20 @@ def main():
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     txt          = build_text(runs, summary, generated_at, period_label)
 
-    with open(txt_path, "w") as f:
+    output_path = hist_path if first_run else txt_path
+    with open(output_path, "w") as f:
         f.write(txt)
 
-    print(f"Fetched {len(runs)} run(s).")
-    print(f"  Total distance:  {summary['total_miles']} miles")
-    print(f"  Avg pace:        {summary['avg_pace_overall']}")
-    print(f"  Saved to:        running_data.txt")
+    if first_run:
+        label = "Rebuilt" if (hist_missing and last_fetch != 0) else "Saved"
+        print(f"Fetched {len(runs)} runs ({len(runs_with_streams)} with stream detail).")
+        print(f"  Total distance:  {summary['total_miles']} miles")
+        print(f"  {label} to:       historical_running_data.txt")
+    else:
+        print(f"Fetched {len(runs)} new run(s).")
+        print(f"  Total distance:  {summary['total_miles']} miles")
+        print(f"  Avg pace:        {summary['avg_pace_overall']}")
+        print(f"  Saved to:        running_data.txt")
     print()
     print("Task completed successfully.")
 
