@@ -1,6 +1,6 @@
 # Strava Running Coach Data Fetcher
 
-This app will pull all of your historical runs into a clean summary to paste into Claude for coaching. Then each week, it pulls the latest runs for a faster upload. Each run includes per-run pace by minute and heart rate + elevation every 10 seconds.
+On first run, fetches the past 180 days of runs with full stream data. Every run after that, archives the previous data and fetches only new runs — so your history grows over time without ever re-pulling everything. Each run includes per-run pace by minute and heart rate + elevation every 10 seconds.
 
 ## One-time setup
 
@@ -32,7 +32,7 @@ Double-click `start.command`. It will detect that authorization hasn't happened 
 
 Double-click `start.command`. That's it.
 
-It will refresh your token automatically, fetch your last 30 days of runs, and save `running_data.txt` in the same folder. Open that file and paste it into a Claude chat for coaching.
+It refreshes your token automatically, fetches any runs since your last update, and saves `running_data.txt`. The previous file is archived to `historical_running_data.txt` automatically. Paste either file into a Claude chat for coaching.
 
 ## What's in the output
 
