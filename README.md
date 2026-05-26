@@ -52,3 +52,36 @@ For each run:
 | `authorize.py` | OAuth setup — called automatically by `start.command` when needed |
 | `get_recent_data.py` | The main script — called by `start.command` |
 | `running_data.txt` | Output — paste this into Claude for coaching |
+| `historical_running_data.txt` | All previous fetches, archived automatically |
+
+## Sample coaching prompt
+
+Paste this into a new Claude chat along with your `running_data.txt` file to get started with a coaching session. Fill in the blanks before sending.
+
+---
+
+Dear Coach,
+
+I want you to act as my expert running coach. Your mission is to get me in the best shape possible to achieve my next goal: running 10k in June.
+
+Before we start building my training plans, I want you to fully understand my background, habits, and context.
+
+**Base info:**
+- Age:
+- Weight:
+- Height:
+- Sport history:
+- Running experience:
+- Past injuries:
+- Work & lifestyle:
+- Weekly availability for training:
+- Terrain preference: trails, roads, or both?
+- Equipment:
+
+Before we build the plan, I will upload some historical running data from my Strava account as a txt file.
+
+Can you confirm you understand this data, or do you need me to clarify anything?
+
+Before you build a plan, please ask me any questions that would help you design the best possible training and nutrition plan for me.
+
+---
