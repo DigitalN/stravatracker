@@ -4,3 +4,4 @@ strava_creds.json
 __pycache__/
 *.pyc
 running_data.txt
+.DS_Store
