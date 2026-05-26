@@ -4,8 +4,5 @@ strava_creds.json
 __pycache__/
 *.pyc
 running_data.txt
-<<<<<<< Updated upstream
-=======
-running_data.json
->>>>>>> Stashed changes
+historical_running_data.txt
 .DS_Store

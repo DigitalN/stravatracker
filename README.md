@@ -1,43 +1,88 @@
 # Strava Running Coach Data Fetcher
 
-Pulls the last 30 days of your Strava runs into a clean summary you can paste into Claude for coaching.
+This app will pull all of your historical runs into a clean summary to paste into Claude for coaching. Then each week, it pulls the latest runs for a faster upload. Each run includes per-run pace by minute and heart rate + elevation every 10 seconds.
 
 ## One-time setup
 
-**1. Install dependencies**
+**1. Install Python dependencies by running this command in Terminal**
 ```bash
 pip install requests
 ```
 
-**2. Add your Strava credentials to `strava_creds.json`**
+**2. Create your Strava app**
+
+Go to [strava.com/settings/api](https://www.strava.com/settings/api) and create an app. The only field that matters for local use:
+- **Authorization Callback Domain**: `localhost`
+
+Copy your **Client ID** and **Client Secret** from that page.
+
+> **Important:** Do not copy the "Access Token" shown on that page — it only has public scope and will not work for reading your activities.
+
+**3. Add your credentials**
 ```bash
 cp strava_creds.json.example strava_creds.json
 ```
-Open `strava_creds.json` and fill in your `client_id` and `client_secret` from [strava.com/settings/api](https://www.strava.com/settings/api).
-Set **Authorization Callback Domain** to `localhost` when creating your app.
+Open `strava_creds.json` and fill in `client_id` and `client_secret`. Leave everything else alone — it's filled in automatically.
 
-**3. Authorize once**
-```bash
-./authorize.py
-```
-Opens your browser → approve access → tokens saved automatically to `strava_creds.json`.
+**4. Authorize once**
+
+Double-click `start.command`. It will detect that authorization hasn't happened yet, open Strava in your browser, and save your tokens automatically when you approve. You will never need to do this again.
 
 ## Daily use
 
-Just run:
-```bash
-./get_recent_data.py
-```
+Double-click `start.command`. That's it.
 
-That's it. It refreshes your token automatically, fetches the last 30 days of runs, and writes:
-- `running_data.txt` — paste this into Claude for coaching
-- `running_data.json` — structured data if you need it
+It will refresh your token automatically, fetch your last 30 days of runs, and save `running_data.txt` in the same folder. Open that file and paste it into a Claude chat for coaching.
+
+## What's in the output
+
+For each run:
+- Date, distance, moving time, average pace
+- Total elevation gain, average and max heart rate
+- **Pace by minute** — average pace for each minute of the run
+- **Heart rate & elevation every 10 seconds** — full detail stream for the entire run
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `strava_creds.json` | Your credentials and tokens (gitignored — never committed) |
-| `strava_creds.json.example` | Template to copy from |
-| `authorize.py` | One-time OAuth setup |
-| `get_recent_data.py` | Run this anytime to refresh your data |
+| `start.command` | Double-click this to fetch your data |
+| `strava_creds.json` | Your credentials and tokens — gitignored, never committed |
+| `strava_creds.json.example` | Template — copy this to `strava_creds.json` to get started |
+| `authorize.py` | OAuth setup — called automatically by `start.command` when needed |
+| `get_recent_data.py` | The main script — called by `start.command` |
+| `running_data.txt` | Output — paste this into Claude for coaching |
+| `historical_running_data.txt` | All previous fetches, archived automatically |
+
+## Sample coaching prompt
+
+Paste this into a new Claude chat along with your `running_data.txt` file to get started with a coaching session. Fill in the blanks before sending.
+
+---
+
+Dear Coach,
+
+I want you to act as my expert running coach. Your mission is to get me in the best shape possible to achieve my goal.
+
+Before we start building my training plans, I want you to fully understand my background, habits, and context.
+
+**Base info:**
+- What is your running goal? Acheiving a distance by a certain date?:
+- Age:
+- Weight:
+- Height:
+- Sport history:
+- Running experience:
+- Past injuries:
+- Work & lifestyle:
+- Weekly availability for training:
+- Terrain preference: trails, roads, or both?
+- Equipment:
+
+Before we build the plan, I will upload some historical running data from my Strava account as a txt file.
+
+Can you confirm you understand this data, or do you need me to clarify anything?
+
+Before you build a plan, please ask me any questions that would help you design the best possible training plan for me.
+
+---
