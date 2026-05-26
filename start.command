@@ -51,13 +51,20 @@ if grep -q "YOUR_CLIENT_ID" strava_creds.json; then
     exit 1
 fi
 
-# Check if we have a refresh token — if not, run authorization first
-REFRESH=$(python3 -c "import json; d=json.load(open('strava_creds.json')); print(d.get('refresh_token',''))" 2>/dev/null)
-if [ -z "$REFRESH" ]; then
-    echo "First-time authorization — your browser will open."
-    echo "Log in to Strava and click 'Authorize'."
+# Check if the OAuth flow has been completed.
+# token_expires_at is 0 in the example file and only gets a real value after
+# authorize.py completes — so if it's 0 the user hasn't authorized yet.
+# NOTE: the tokens on strava.com/settings/api have public scope only and will
+# NOT work here. Authorization must go through authorize.py to get activity:read_all.
+EXPIRES=$(python3 -c "import json; d=json.load(open('strava_creds.json')); print(d.get('token_expires_at', 0))" 2>/dev/null)
+if [ -z "$EXPIRES" ] || [ "$EXPIRES" = "0" ]; then
+    echo "Authorization required — your browser will open Strava."
+    echo "Log in and click 'Authorize' to grant activity access."
     echo ""
-    python3 authorize.py
+    echo "NOTE: Do NOT copy tokens from strava.com/settings/api — those"
+    echo "tokens only have public access and cannot read your activities."
+    echo ""
+    python3 authorize.py || { echo ""; read -p "Authorization failed. Press Enter to close..."; exit 1; }
     echo ""
 fi
 
