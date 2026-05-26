@@ -1,10 +1,10 @@
 # Strava Running Coach Data Fetcher
 
-Pulls the last 30 days of your Strava runs into a clean summary to paste into Claude for coaching. Includes per-run pace by minute and heart rate + elevation every 10 seconds.
+This app will pull all of your historical runs into a clean summary to paste into Claude for coaching. Then each week, it pulls the latest runs for a faster upload. Each run includes per-run pace by minute and heart rate + elevation every 10 seconds.
 
 ## One-time setup
 
-**1. Install Python dependencies**
+**1. Install Python dependencies by running this command in Terminal**
 ```bash
 pip install requests
 ```
@@ -62,11 +62,12 @@ Paste this into a new Claude chat along with your `running_data.txt` file to get
 
 Dear Coach,
 
-I want you to act as my expert running coach. Your mission is to get me in the best shape possible to achieve my next goal: running 10k in June.
+I want you to act as my expert running coach. Your mission is to get me in the best shape possible to achieve my goal.
 
 Before we start building my training plans, I want you to fully understand my background, habits, and context.
 
 **Base info:**
+- What is your running goal? Acheiving a distance by a certain date?:
 - Age:
 - Weight:
 - Height:
@@ -82,6 +83,6 @@ Before we build the plan, I will upload some historical running data from my Str
 
 Can you confirm you understand this data, or do you need me to clarify anything?
 
-Before you build a plan, please ask me any questions that would help you design the best possible training and nutrition plan for me.
+Before you build a plan, please ask me any questions that would help you design the best possible training plan for me.
 
 ---
