@@ -1,4 +1,5 @@
 .env
+strava_creds.json
 *.token
 __pycache__/
 *.pyc

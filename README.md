@@ -2,30 +2,42 @@
 
 Pulls the last 30 days of your Strava runs into a clean summary you can paste into Claude for coaching.
 
-## Setup
+## One-time setup
 
+**1. Install dependencies**
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
-# Edit .env and fill in your STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET
+pip install requests
 ```
 
-## Usage
-
-**First time only — authorize your app:**
+**2. Add your Strava credentials to `strava_creds.json`**
 ```bash
-python authorize.py
+cp strava_creds.json.example strava_creds.json
 ```
-This opens your browser, you approve access, and your refresh token is saved to `.env`.
+Open `strava_creds.json` and fill in your `client_id` and `client_secret` from [strava.com/settings/api](https://www.strava.com/settings/api).
+Set **Authorization Callback Domain** to `localhost` when creating your app.
 
-**Fetch your runs:**
+**3. Authorize once**
 ```bash
-python fetch_runs.py
+./authorize.py
 ```
-Outputs `running_data.txt` (paste into Claude) and `running_data.json` (structured data).
+Opens your browser → approve access → tokens saved automatically to `strava_creds.json`.
 
-## Getting Strava Credentials
+## Daily use
 
-1. Go to https://www.strava.com/settings/api
-2. Create an app — set **Authorization Callback Domain** to `localhost`
-3. Copy your **Client ID** and **Client Secret** into `.env`
+Just run:
+```bash
+./get_recent_data.py
+```
+
+That's it. It refreshes your token automatically, fetches the last 30 days of runs, and writes:
+- `running_data.txt` — paste this into Claude for coaching
+- `running_data.json` — structured data if you need it
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `strava_creds.json` | Your credentials and tokens (gitignored — never committed) |
+| `strava_creds.json.example` | Template to copy from |
+| `authorize.py` | One-time OAuth setup |
+| `get_recent_data.py` | Run this anytime to refresh your data |

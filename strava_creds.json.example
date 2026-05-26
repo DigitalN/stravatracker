@@ -1,0 +1,7 @@
+{
+  "client_id": "YOUR_CLIENT_ID",
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "refresh_token": "",
+  "access_token": "",
+  "token_expires_at": 0
+}

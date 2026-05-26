@@ -1,40 +1,52 @@
 #!/usr/bin/env python3
 """
-Step 1: Run this script once to authorize your Strava app and get a refresh token.
-It will open your browser, you log in and approve, then paste the redirect URL back here.
-The refresh token is saved to .env so fetch_runs.py can use it automatically.
+Run this ONCE to authorize your Strava app.
+It opens your browser, you approve access, then your tokens are saved to strava_creds.json.
+After this, get_recent_data.py handles everything automatically.
 """
 
+import json
 import os
 import sys
+import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import requests
-from dotenv import load_dotenv
 
-load_dotenv()
-
-CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
-CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
-
-if not CLIENT_ID or not CLIENT_SECRET:
-    print("ERROR: STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET must be set in .env")
-    sys.exit(1)
-
+CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strava_creds.json")
 REDIRECT_URI = "http://localhost:8765/callback"
 SCOPE = "activity:read_all"
 
 auth_code = None
 
 
+def load_creds():
+    if not os.path.exists(CREDS_FILE):
+        example = CREDS_FILE + ".example"
+        if os.path.exists(example):
+            import shutil
+            shutil.copy(example, CREDS_FILE)
+            print(f"Created strava_creds.json from example — please fill in your client_id and client_secret.")
+            sys.exit(1)
+        else:
+            print(f"ERROR: {CREDS_FILE} not found. Create it with your client_id and client_secret.")
+            sys.exit(1)
+
+    with open(CREDS_FILE) as f:
+        return json.load(f)
+
+
+def save_creds(creds):
+    with open(CREDS_FILE, "w") as f:
+        json.dump(creds, f, indent=2)
+
+
 class CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         global auth_code
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
-
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         if "code" in params:
             auth_code = params["code"][0]
             self.send_response(200)
@@ -54,45 +66,24 @@ class CallbackHandler(BaseHTTPRequestHandler):
             self.wfile.write(f"<html><body>Authorization failed: {error}</body></html>".encode())
 
     def log_message(self, format, *args):
-        pass  # suppress request logs
-
-
-def exchange_code_for_tokens(code):
-    resp = requests.post("https://www.strava.com/oauth/token", data={
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "code": code,
-        "grant_type": "authorization_code",
-    })
-    resp.raise_for_status()
-    return resp.json()
-
-
-def save_refresh_token(refresh_token):
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    lines = []
-    found = False
-
-    if os.path.exists(env_path):
-        with open(env_path) as f:
-            lines = f.readlines()
-        for i, line in enumerate(lines):
-            if line.startswith("STRAVA_REFRESH_TOKEN="):
-                lines[i] = f"STRAVA_REFRESH_TOKEN={refresh_token}\n"
-                found = True
-                break
-
-    if not found:
-        lines.append(f"STRAVA_REFRESH_TOKEN={refresh_token}\n")
-
-    with open(env_path, "w") as f:
-        f.writelines(lines)
+        pass
 
 
 def main():
+    creds = load_creds()
+    client_id = creds.get("client_id", "")
+    client_secret = creds.get("client_secret", "")
+
+    if not client_id or client_id == "YOUR_CLIENT_ID":
+        print("ERROR: Fill in client_id in strava_creds.json first.")
+        sys.exit(1)
+    if not client_secret or client_secret == "YOUR_CLIENT_SECRET":
+        print("ERROR: Fill in client_secret in strava_creds.json first.")
+        sys.exit(1)
+
     auth_url = (
         "https://www.strava.com/oauth/authorize"
-        f"?client_id={CLIENT_ID}"
+        f"?client_id={client_id}"
         f"&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
         f"&response_type=code"
         f"&scope={SCOPE}"
@@ -104,29 +95,36 @@ def main():
     server_thread.daemon = True
     server_thread.start()
 
-    print(f"\nOpening Strava authorization page in your browser...")
-    print(f"If it doesn't open automatically, visit:\n{auth_url}\n")
+    print("Opening Strava authorization in your browser...")
+    print(f"If it doesn't open, visit:\n{auth_url}\n")
     webbrowser.open(auth_url)
 
-    print("Waiting for authorization (approve access in your browser)...")
+    print("Waiting for you to approve access in the browser...")
     server_thread.join(timeout=120)
 
     if not auth_code:
-        print("ERROR: Timed out waiting for authorization. Try again.")
+        print("ERROR: Timed out. Try again.")
         sys.exit(1)
 
-    print("Authorization code received. Exchanging for tokens...")
-    tokens = exchange_code_for_tokens(auth_code)
+    resp = requests.post("https://www.strava.com/oauth/token", data={
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": auth_code,
+        "grant_type": "authorization_code",
+    })
+    resp.raise_for_status()
+    tokens = resp.json()
 
-    refresh_token = tokens.get("refresh_token")
+    creds["refresh_token"] = tokens["refresh_token"]
+    creds["access_token"] = tokens["access_token"]
+    creds["token_expires_at"] = tokens["expires_at"]
+    save_creds(creds)
+
     athlete = tokens.get("athlete", {})
     name = f"{athlete.get('firstname', '')} {athlete.get('lastname', '')}".strip()
-
-    save_refresh_token(refresh_token)
-
     print(f"\nSuccess! Authorized as: {name or 'Unknown athlete'}")
-    print(f"Refresh token saved to .env")
-    print(f"\nYou can now run: python fetch_runs.py")
+    print("Tokens saved to strava_creds.json")
+    print("\nSetup complete. You can now run get_recent_data.py anytime.")
 
 
 if __name__ == "__main__":
