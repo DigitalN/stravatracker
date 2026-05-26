@@ -63,5 +63,9 @@ fi
 
 # Fetch the data
 python3 get_recent_data.py
+EXIT_CODE=$?
 echo ""
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "Something went wrong (see error above)."
+fi
 read -p "Press Enter to close..."

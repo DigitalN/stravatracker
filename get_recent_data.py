@@ -30,31 +30,38 @@ def save_creds(creds):
         json.dump(creds, f, indent=2)
 
 
-def get_valid_access_token(creds):
-    # Refresh if token is expired or expires within 5 minutes
-    if time.time() < creds.get("token_expires_at", 0) - 300:
-        return creds["access_token"], creds
+def do_token_refresh(creds):
+    try:
+        resp = requests.post("https://www.strava.com/oauth/token", data={
+            "client_id": creds["client_id"],
+            "client_secret": creds["client_secret"],
+            "refresh_token": creds["refresh_token"],
+            "grant_type": "refresh_token",
+        })
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print(f"\nERROR: Token refresh failed ({e}).")
+        print("Re-run start.command to re-authorize with Strava.")
+        sys.exit(1)
 
-    resp = requests.post("https://www.strava.com/oauth/token", data={
-        "client_id": creds["client_id"],
-        "client_secret": creds["client_secret"],
-        "refresh_token": creds["refresh_token"],
-        "grant_type": "refresh_token",
-    })
-    resp.raise_for_status()
     tokens = resp.json()
-
     creds["access_token"] = tokens["access_token"]
     creds["refresh_token"] = tokens["refresh_token"]
     creds["token_expires_at"] = tokens["expires_at"]
     save_creds(creds)
-
     return creds["access_token"], creds
+
+
+def get_valid_access_token(creds):
+    # Refresh if token is expired or expires within 5 minutes
+    if time.time() < creds.get("token_expires_at", 0) - 300:
+        return creds["access_token"], creds
+    return do_token_refresh(creds)
 
 
 # ── Strava API ─────────────────────────────────────────────────────────────────
 
-def fetch_activities(access_token, after_timestamp):
+def fetch_activities(access_token, creds, after_timestamp):
     activities = []
     page = 1
     while True:
@@ -63,6 +70,19 @@ def fetch_activities(access_token, after_timestamp):
             headers={"Authorization": f"Bearer {access_token}"},
             params={"after": after_timestamp, "per_page": 100, "page": page},
         )
+        if resp.status_code == 401:
+            # Token was rejected despite appearing valid — force a refresh and retry once
+            print("Access token rejected by Strava, refreshing...")
+            access_token, creds = do_token_refresh(creds)
+            resp = requests.get(
+                "https://www.strava.com/api/v3/athlete/activities",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"after": after_timestamp, "per_page": 100, "page": page},
+            )
+            if resp.status_code == 401:
+                print("\nERROR: Still unauthorized after token refresh.")
+                print("Delete strava_creds.json and run start.command again to re-authorize.")
+                sys.exit(1)
         resp.raise_for_status()
         batch = resp.json()
         if not batch:
@@ -193,7 +213,7 @@ def main():
     access_token, creds = get_valid_access_token(creds)
 
     after_ts = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
-    activities = fetch_activities(access_token, after_ts)
+    activities = fetch_activities(access_token, creds, after_ts)
 
     runs_raw = [a for a in activities if a.get("sport_type") in RUN_TYPES or a.get("type") == "Run"]
     if not runs_raw:
