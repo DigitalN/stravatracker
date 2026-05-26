@@ -422,13 +422,17 @@ def main():
     txt_path  = os.path.join(OUTPUT_DIR, "running_data.txt")
     hist_path = os.path.join(OUTPUT_DIR, "historical_running_data.txt")
 
-    last_fetch = creds.get("last_fetch_at", 0)
-    first_run  = last_fetch == 0
+    last_fetch       = creds.get("last_fetch_at", 0)
+    hist_missing     = not os.path.exists(hist_path)
+    first_run        = last_fetch == 0 or hist_missing
 
     if first_run:
         after_ts     = 0
         period_label = "ALL TIME"
-        print("First run — fetching all runs ever (no streams, to respect API rate limits)...")
+        if hist_missing and last_fetch != 0:
+            print("historical_running_data.txt not found — re-fetching all runs to rebuild it...")
+        else:
+            print("First run — fetching all runs ever (no streams, to respect API rate limits)...")
     else:
         after_ts     = last_fetch
         since_date   = datetime.fromtimestamp(last_fetch).strftime("%Y-%m-%d")
