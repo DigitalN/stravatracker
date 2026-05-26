@@ -4,5 +4,6 @@
   "_note": "Do not touch the values below — they are added automatically by authorize.py",
   "refresh_token": "",
   "access_token": "",
-  "token_expires_at": 0
+  "token_expires_at": 0,
+  "last_fetch_at": 0
 }

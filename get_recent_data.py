@@ -264,10 +264,10 @@ def compute_summary(runs):
 
 # ── Text output ────────────────────────────────────────────────────────────────
 
-def build_text(runs, summary, generated_at):
+def build_text(runs, summary, generated_at, period_label):
     lines = [
         "=" * 60,
-        "STRAVA RUNNING DATA — LAST 30 DAYS",
+        f"STRAVA RUNNING DATA — {period_label}",
         f"Generated: {generated_at}",
         "=" * 60,
         "",
@@ -358,18 +358,32 @@ def main():
 
     access_token, creds = get_valid_access_token(creds)
 
-    after_ts   = int((datetime.now(timezone.utc) - timedelta(days=30)).timestamp())
-    activities = fetch_activities(access_token, creds, after_ts)
+    txt_path  = os.path.join(OUTPUT_DIR, "running_data.txt")
+    hist_path = os.path.join(OUTPUT_DIR, "historical_running_data.txt")
 
-    runs_raw = [a for a in activities if a.get("sport_type") in RUN_TYPES or a.get("type") == "Run"]
+    last_fetch = creds.get("last_fetch_at", 0)
+    first_run  = last_fetch == 0 or not os.path.exists(txt_path)
+
+    if first_run:
+        after_ts     = int((datetime.now(timezone.utc) - timedelta(days=120)).timestamp())
+        period_label = "LAST 120 DAYS"
+        print("First run — fetching last 120 days of runs...")
+    else:
+        after_ts     = last_fetch
+        since_date   = datetime.fromtimestamp(last_fetch).strftime("%Y-%m-%d")
+        period_label = f"NEW RUNS SINCE {since_date}"
+        print(f"Fetching new runs since {since_date}...")
+
+    activities = fetch_activities(access_token, creds, after_ts)
+    runs_raw   = [a for a in activities if a.get("sport_type") in RUN_TYPES or a.get("type") == "Run"]
+
     if not runs_raw:
-        print("No runs found in the last 30 days.")
+        print("No new runs found since last fetch.")
         print("\nTask completed successfully.")
         sys.exit(0)
 
     runs = sorted([parse_activity(a) for a in runs_raw], key=lambda r: r["date"])
 
-    # Fetch detailed stream data for each run
     print(f"Fetching stream data for {len(runs)} run(s)...")
     for i, run in enumerate(runs, 1):
         print(f"  [{i}/{len(runs)}] {run['name']}", end="\r")
@@ -379,17 +393,31 @@ def main():
 
     summary      = compute_summary(runs)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    txt          = build_text(runs, summary, generated_at, period_label)
 
-    txt      = build_text(runs, summary, generated_at)
-    txt_path  = os.path.join(OUTPUT_DIR, "running_data.txt")
+    # On subsequent runs, append the previous running_data.txt to the historical file
+    if not first_run and os.path.exists(txt_path):
+        with open(txt_path) as f:
+            old = f.read()
+        with open(hist_path, "a") as f:
+            f.write(old)
+            f.write("\n")
 
     with open(txt_path, "w") as f:
         f.write(txt)
 
-    print(f"Fetched {len(runs)} runs from the last 30 days.")
+    creds["last_fetch_at"] = int(datetime.now(timezone.utc).timestamp())
+    save_creds(creds)
+
+    if first_run:
+        print(f"First run: fetched {len(runs)} runs from the last 120 days.")
+    else:
+        print(f"Fetched {len(runs)} new run(s).")
     print(f"  Total distance:  {summary['total_miles']} miles")
     print(f"  Avg pace:        {summary['avg_pace_overall']}")
-    print(f"  Saved to:        running_data.txt")
+    if not first_run:
+        print(f"  Previous data archived to: historical_running_data.txt")
+    print(f"  Latest data saved to:      running_data.txt")
     print()
     print("Task completed successfully.")
 
