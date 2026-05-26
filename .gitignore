@@ -1,0 +1,6 @@
+.env
+*.token
+__pycache__/
+*.pyc
+running_data.txt
+running_data.json
