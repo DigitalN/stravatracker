@@ -5,7 +5,6 @@ Handles token refresh automatically. Just run it — no arguments needed.
 """
 
 import bisect
-import json
 import os
 import sys
 import time
@@ -382,19 +381,14 @@ def main():
 
     txt      = build_text(runs, summary, generated_at)
     txt_path  = os.path.join(OUTPUT_DIR, "running_data.txt")
-    json_path = os.path.join(OUTPUT_DIR, "running_data.json")
 
     with open(txt_path, "w") as f:
         f.write(txt)
 
-    with open(json_path, "w") as f:
-        json.dump({"generated_at": generated_at, "period": "last_30_days",
-                   "summary": summary, "runs": runs}, f, indent=2)
-
     print(f"Fetched {len(runs)} runs from the last 30 days.")
     print(f"  Total distance:  {summary['total_miles']} miles")
     print(f"  Avg pace:        {summary['avg_pace_overall']}")
-    print(f"  Saved to:        running_data.txt + running_data.json")
+    print(f"  Saved to:        running_data.txt")
     print()
     print("Task completed successfully.")
 
