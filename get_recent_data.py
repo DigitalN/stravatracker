@@ -20,7 +20,8 @@ TIMEOUT_API    = 30          # seconds — activity list and stream GETs
 RETRY_STATUSES = {500, 502, 503}
 RETRY_BACKOFF  = [2, 4]      # wait before attempt 2, then attempt 3
 MAX_PAGES      = 50          # 50 × 100 = 5,000 activities
-STREAM_DELAY   = 0.5         # seconds between consecutive stream fetches
+STREAM_DELAY        = 0.5    # seconds between consecutive stream fetches
+STREAM_HISTORY_DAYS = 180    # fetch streams for runs within this window
 
 
 # ── Credentials ────────────────────────────────────────────────────────────────
@@ -461,12 +462,17 @@ def main():
 
     runs = sorted([parse_activity(a) for a in runs_raw], key=lambda r: r["date"])
 
-    if not first_run:
-        print(f"Fetching stream data for {len(runs)} run(s)...")
-        for i, run in enumerate(runs, 1):
-            print(f"  [{i}/{len(runs)}] {run['name']}", end="\r")
+    stream_cutoff = (datetime.now(timezone.utc) - timedelta(days=STREAM_HISTORY_DAYS)).strftime("%Y-%m-%d")
+    runs_needing_streams = [r for r in runs if r["date"] >= stream_cutoff]
+
+    if runs_needing_streams:
+        print(f"Fetching stream data for {len(runs_needing_streams)} run(s) from the past {STREAM_HISTORY_DAYS} days...")
+        if len(runs_needing_streams) > 90:
+            print("  (This may take a few minutes — Strava rate limits stream requests.)")
+        for i, run in enumerate(runs_needing_streams, 1):
+            print(f"  [{i}/{len(runs_needing_streams)}] {run['name']}", end="\r")
             run["streams"] = process_streams(fetch_streams(session, run["id"]))
-            if i < len(runs):
+            if i < len(runs_needing_streams):
                 time.sleep(STREAM_DELAY)
         print()
 
