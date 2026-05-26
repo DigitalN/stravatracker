@@ -5,6 +5,7 @@ Handles token refresh automatically. Just run it — no arguments needed.
 """
 
 import bisect
+import json
 import os
 import sys
 import time
