@@ -428,12 +428,12 @@ def main():
     first_run     = last_fetch == 0 or hist_missing
 
     if first_run:
-        after_ts     = int((datetime.now(timezone.utc) - timedelta(days=STREAM_HISTORY_DAYS)).timestamp())
-        period_label = f"LAST {STREAM_HISTORY_DAYS} DAYS"
+        after_ts     = 0  # fetch all run summaries ever
+        period_label = "ALL TIME"
         if hist_missing and last_fetch != 0:
-            print(f"historical_running_data.txt not found — re-fetching the past {STREAM_HISTORY_DAYS} days to rebuild it...")
+            print(f"historical_running_data.txt not found — re-fetching all runs (streams for past {STREAM_HISTORY_DAYS} days)...")
         else:
-            print(f"First run — fetching the past {STREAM_HISTORY_DAYS} days of runs...")
+            print(f"First run — fetching all runs ever (streams for past {STREAM_HISTORY_DAYS} days)...")
     else:
         after_ts   = last_fetch
         since_date = datetime.fromtimestamp(last_fetch).strftime("%Y-%m-%d")
@@ -462,16 +462,19 @@ def main():
 
     runs = sorted([parse_activity(a) for a in runs_raw], key=lambda r: r["date"])
 
-    # All fetched runs are within the stream window, so fetch streams for all of them
-    print(f"Fetching stream data for {len(runs)} run(s)...")
-    if len(runs) > 90:
-        print("  (This may take a few minutes — Strava rate limits stream requests.)")
-    for i, run in enumerate(runs, 1):
-        print(f"  [{i}/{len(runs)}] {run['name']}", end="\r")
-        run["streams"] = process_streams(fetch_streams(session, run["id"]))
-        if i < len(runs):
-            time.sleep(STREAM_DELAY)
-    print()
+    stream_cutoff     = (datetime.now(timezone.utc) - timedelta(days=STREAM_HISTORY_DAYS)).strftime("%Y-%m-%d")
+    runs_with_streams = [r for r in runs if r["date"] >= stream_cutoff]
+
+    if runs_with_streams:
+        print(f"Fetching stream data for {len(runs_with_streams)} run(s) from the past {STREAM_HISTORY_DAYS} days...")
+        if len(runs_with_streams) > 90:
+            print("  (This may take a few minutes — Strava rate limits stream requests.)")
+        for i, run in enumerate(runs_with_streams, 1):
+            print(f"  [{i}/{len(runs_with_streams)}] {run['name']}", end="\r")
+            run["streams"] = process_streams(fetch_streams(session, run["id"]))
+            if i < len(runs_with_streams):
+                time.sleep(STREAM_DELAY)
+        print()
 
     summary      = compute_summary(runs)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
