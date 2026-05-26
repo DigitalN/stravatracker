@@ -7,6 +7,7 @@ After this, get_recent_data.py handles everything automatically.
 
 import json
 import os
+import socket
 import sys
 import time
 import urllib.parse
@@ -15,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 import requests
 
-CREDS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strava_creds.json")
+CREDS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strava_creds.json")
+TIMEOUT_TOKEN = 10  # seconds — OAuth POST
 REDIRECT_URI = "http://localhost:8765/callback"
 SCOPE = "activity:read_all"
 
@@ -41,6 +43,7 @@ def load_creds():
 def save_creds(creds):
     with open(CREDS_FILE, "w") as f:
         json.dump(creds, f, indent=2)
+    os.chmod(CREDS_FILE, 0o600)
 
 
 class CallbackHandler(BaseHTTPRequestHandler):
@@ -91,7 +94,15 @@ def main():
 
     print("Starting local callback server on port 8765...")
     server = HTTPServer(("localhost", 8765), CallbackHandler)
-    server_thread = threading.Thread(target=server.handle_request)
+    server.socket.settimeout(120)
+
+    def _run_server(srv):
+        try:
+            srv.handle_request()
+        except (OSError, Exception):
+            pass  # socket timeout or client disconnect — auth_code check below handles it
+
+    server_thread = threading.Thread(target=_run_server, args=(server,))
     server_thread.daemon = True
     server_thread.start()
 
@@ -111,13 +122,23 @@ def main():
         "client_secret": client_secret,
         "code": auth_code,
         "grant_type": "authorization_code",
-    })
+    }, timeout=TIMEOUT_TOKEN)
     resp.raise_for_status()
-    tokens = resp.json()
 
-    creds["refresh_token"] = tokens["refresh_token"]
-    creds["access_token"] = tokens["access_token"]
-    creds["token_expires_at"] = tokens["expires_at"]
+    try:
+        tokens = resp.json()
+    except ValueError:
+        print("ERROR: Strava returned an unexpected response. Try again.")
+        sys.exit(1)
+
+    try:
+        creds["refresh_token"]    = tokens["refresh_token"]
+        creds["access_token"]     = tokens["access_token"]
+        creds["token_expires_at"] = tokens["expires_at"]
+    except KeyError as e:
+        print(f"ERROR: Token response missing expected field {e}. Try again.")
+        sys.exit(1)
+
     save_creds(creds)
 
     athlete = tokens.get("athlete", {})
