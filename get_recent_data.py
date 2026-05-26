@@ -374,11 +374,24 @@ def main():
         period_label = f"NEW RUNS SINCE {since_date}"
         print(f"Fetching new runs since {since_date}...")
 
+    # Always archive existing running_data.txt on subsequent runs, before anything else
+    if not first_run and os.path.exists(txt_path):
+        with open(txt_path) as f:
+            old = f.read()
+        with open(hist_path, "a") as f:
+            f.write(old)
+            f.write("\n")
+        os.remove(txt_path)
+        print("  Previous data archived to historical_running_data.txt")
+
     activities = fetch_activities(access_token, creds, after_ts)
     runs_raw   = [a for a in activities if a.get("sport_type") in RUN_TYPES or a.get("type") == "Run"]
 
+    creds["last_fetch_at"] = int(datetime.now(timezone.utc).timestamp())
+    save_creds(creds)
+
     if not runs_raw:
-        print("No new runs found since last fetch.")
+        print("No new runs found.")
         print("\nTask completed successfully.")
         sys.exit(0)
 
@@ -395,19 +408,8 @@ def main():
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     txt          = build_text(runs, summary, generated_at, period_label)
 
-    # On subsequent runs, append the previous running_data.txt to the historical file
-    if not first_run and os.path.exists(txt_path):
-        with open(txt_path) as f:
-            old = f.read()
-        with open(hist_path, "a") as f:
-            f.write(old)
-            f.write("\n")
-
     with open(txt_path, "w") as f:
         f.write(txt)
-
-    creds["last_fetch_at"] = int(datetime.now(timezone.utc).timestamp())
-    save_creds(creds)
 
     if first_run:
         print(f"First run: fetched {len(runs)} runs from the last 120 days.")
@@ -415,9 +417,7 @@ def main():
         print(f"Fetched {len(runs)} new run(s).")
     print(f"  Total distance:  {summary['total_miles']} miles")
     print(f"  Avg pace:        {summary['avg_pace_overall']}")
-    if not first_run:
-        print(f"  Previous data archived to: historical_running_data.txt")
-    print(f"  Latest data saved to:      running_data.txt")
+    print(f"  Latest data saved to: running_data.txt")
     print()
     print("Task completed successfully.")
 
