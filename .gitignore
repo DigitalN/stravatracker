@@ -1,0 +1,11 @@
+.env
+strava_creds.json
+*.token
+__pycache__/
+*.pyc
+running_data.txt
+<<<<<<< Updated upstream
+=======
+running_data.json
+>>>>>>> Stashed changes
+.DS_Store
