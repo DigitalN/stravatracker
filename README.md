@@ -4,12 +4,7 @@ On first run, fetches the past 180 days of runs with full stream data. Every run
 
 ## One-time setup
 
-**1. Install Python dependencies by running this command in Terminal**
-```bash
-pip install requests
-```
-
-**2. Create your Strava app**
+**1. Create your Strava app**
 
 Go to [strava.com/settings/api](https://www.strava.com/settings/api) and create an app. The only field that matters for local use:
 - **Authorization Callback Domain**: `localhost`
