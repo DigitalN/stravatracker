@@ -423,20 +423,16 @@ def main():
     txt_path  = os.path.join(OUTPUT_DIR, "running_data.txt")
     hist_path = os.path.join(OUTPUT_DIR, "historical_running_data.txt")
 
-    last_fetch       = creds.get("last_fetch_at", 0)
-    hist_missing     = not os.path.exists(hist_path)
-    first_run        = last_fetch == 0 or hist_missing
+    last_fetch = creds.get("last_fetch_at", 0)
+    first_run  = last_fetch == 0
 
     if first_run:
-        after_ts     = 0
-        period_label = "ALL TIME"
-        if hist_missing and last_fetch != 0:
-            print("historical_running_data.txt not found — re-fetching all runs to rebuild it...")
-        else:
-            print("First run — fetching all runs ever (no streams, to respect API rate limits)...")
+        after_ts     = int((datetime.now(timezone.utc) - timedelta(days=STREAM_HISTORY_DAYS)).timestamp())
+        period_label = f"LAST {STREAM_HISTORY_DAYS} DAYS"
+        print(f"First run — fetching the past {STREAM_HISTORY_DAYS} days of runs...")
     else:
-        after_ts     = last_fetch
-        since_date   = datetime.fromtimestamp(last_fetch).strftime("%Y-%m-%d")
+        after_ts   = last_fetch
+        since_date = datetime.fromtimestamp(last_fetch).strftime("%Y-%m-%d")
         period_label = f"NEW RUNS SINCE {since_date}"
         print(f"Fetching new runs since {since_date}...")
 
@@ -462,37 +458,28 @@ def main():
 
     runs = sorted([parse_activity(a) for a in runs_raw], key=lambda r: r["date"])
 
-    stream_cutoff = (datetime.now(timezone.utc) - timedelta(days=STREAM_HISTORY_DAYS)).strftime("%Y-%m-%d")
-    runs_needing_streams = [r for r in runs if r["date"] >= stream_cutoff]
-
-    if runs_needing_streams:
-        print(f"Fetching stream data for {len(runs_needing_streams)} run(s) from the past {STREAM_HISTORY_DAYS} days...")
-        if len(runs_needing_streams) > 90:
-            print("  (This may take a few minutes — Strava rate limits stream requests.)")
-        for i, run in enumerate(runs_needing_streams, 1):
-            print(f"  [{i}/{len(runs_needing_streams)}] {run['name']}", end="\r")
-            run["streams"] = process_streams(fetch_streams(session, run["id"]))
-            if i < len(runs_needing_streams):
-                time.sleep(STREAM_DELAY)
-        print()
+    # All fetched runs are within the stream window, so fetch streams for all of them
+    print(f"Fetching stream data for {len(runs)} run(s)...")
+    if len(runs) > 90:
+        print("  (This may take a few minutes — Strava rate limits stream requests.)")
+    for i, run in enumerate(runs, 1):
+        print(f"  [{i}/{len(runs)}] {run['name']}", end="\r")
+        run["streams"] = process_streams(fetch_streams(session, run["id"]))
+        if i < len(runs):
+            time.sleep(STREAM_DELAY)
+    print()
 
     summary      = compute_summary(runs)
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     txt          = build_text(runs, summary, generated_at, period_label)
 
-    output_path = hist_path if first_run else txt_path
-    with open(output_path, "w") as f:
+    with open(txt_path, "w") as f:
         f.write(txt)
 
-    if first_run:
-        print(f"First run: fetched {len(runs)} runs (all time).")
-        print(f"  Total distance:  {summary['total_miles']} miles")
-        print(f"  Saved to:        historical_running_data.txt")
-    else:
-        print(f"Fetched {len(runs)} new run(s).")
-        print(f"  Total distance:  {summary['total_miles']} miles")
-        print(f"  Avg pace:        {summary['avg_pace_overall']}")
-        print(f"  Latest data saved to: running_data.txt")
+    print(f"Fetched {len(runs)} run(s).")
+    print(f"  Total distance:  {summary['total_miles']} miles")
+    print(f"  Avg pace:        {summary['avg_pace_overall']}")
+    print(f"  Saved to:        running_data.txt")
     print()
     print("Task completed successfully.")
 
