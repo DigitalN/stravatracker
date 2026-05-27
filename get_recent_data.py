@@ -178,10 +178,10 @@ def fetch_activities(session, creds, after_timestamp):
 
 
 def fetch_streams(session, activity_id):
-    """Fetch time, heartrate, altitude, and distance streams for one activity."""
     resp = _api_request(session, "GET",
                         f"https://www.strava.com/api/v3/activities/{activity_id}/streams",
-                        params={"keys": "time,heartrate,altitude,distance", "key_by_type": "true"},
+                        params={"keys": "time,heartrate,altitude,distance,velocity_smooth,cadence,moving",
+                                "key_by_type": "true"},
                         timeout=TIMEOUT_API)
     if resp.status_code == 404:
         return None
@@ -190,6 +190,19 @@ def fetch_streams(session, activity_id):
         return resp.json()
     except ValueError:
         print(f"  Warning: could not parse stream data for activity {activity_id}.")
+        return None
+
+
+def fetch_activity_detail(session, activity_id):
+    resp = _api_request(session, "GET",
+                        f"https://www.strava.com/api/v3/activities/{activity_id}",
+                        timeout=TIMEOUT_API)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    try:
+        return resp.json()
+    except ValueError:
         return None
 
 
@@ -234,10 +247,13 @@ def process_streams(raw):
     if not raw or "time" not in raw:
         return None
 
-    times = raw["time"]["data"]
-    hrs   = raw.get("heartrate", {}).get("data", [])
-    alts  = raw.get("altitude",  {}).get("data", [])
-    dists = raw.get("distance",  {}).get("data", [])
+    times   = raw["time"]["data"]
+    hrs     = raw.get("heartrate",       {}).get("data", [])
+    alts    = raw.get("altitude",        {}).get("data", [])
+    dists   = raw.get("distance",        {}).get("data", [])
+    vels    = raw.get("velocity_smooth", {}).get("data", [])
+    cads    = raw.get("cadence",         {}).get("data", [])
+    movings = raw.get("moving",          {}).get("data", [])
 
     n = len(times)
     if n == 0:
@@ -254,8 +270,39 @@ def process_streams(raw):
             mark["heartrate"] = hrs[i]
         if alts:
             mark["elevation_m"] = round(alts[i], 1)
+        if vels:
+            v = vels[i]
+            if v > 0.1:
+                pace_s = 1000.0 / v
+                mark["pace"] = f"{int(pace_s // 60)}:{int(pace_s % 60):02d}/km" if pace_s < 3600 else None
+            else:
+                mark["pace"] = None
+        if cads:
+            mark["cadence"] = cads[i] * 2
+        if movings:
+            mark["moving"] = movings[i]
         ten_sec.append(mark)
         t += 10
+
+    hr_zones = None
+    if any("heartrate" in m for m in ten_sec):
+        zone_defs = [
+            ("Z1", "<130",    lambda h: h < 130),
+            ("Z2", "130-145", lambda h: 130 <= h < 145),
+            ("Z3", "145-160", lambda h: 145 <= h < 160),
+            ("Z4", "160-175", lambda h: 160 <= h < 175),
+            ("Z5", "175+",    lambda h: h >= 175),
+        ]
+        total = sum(1 for m in ten_sec if "heartrate" in m)
+        hr_zones = []
+        for name, label, fn in zone_defs:
+            count = sum(1 for m in ten_sec if "heartrate" in m and fn(m["heartrate"]))
+            hr_zones.append({
+                "zone":    name,
+                "range":   label,
+                "seconds": count * 10,
+                "pct":     round(100 * count / total) if total else 0,
+            })
 
     min_paces = []
     minute = 1
@@ -275,7 +322,7 @@ def process_streams(raw):
         min_paces.append({"minute": minute, "pace": pace})
         minute += 1
 
-    return {"ten_second_marks": ten_sec, "minute_paces": min_paces}
+    return {"ten_second_marks": ten_sec, "minute_paces": min_paces, "hr_zones": hr_zones}
 
 
 # ── Activity parsing ───────────────────────────────────────────────────────────
@@ -300,6 +347,7 @@ def parse_activity(a):
         "avg_heart_rate":      a.get("average_heartrate"),
         "max_heart_rate":      a.get("max_heartrate"),
         "sport_type":          a.get("sport_type", "Run"),
+        "temperature":         None,
         "streams":             None,
     }
 
@@ -364,8 +412,17 @@ def build_text(runs, summary, generated_at, period_label):
             lines.append(f"  Avg HR:        {int(r['avg_heart_rate'])} bpm")
         if r["max_heart_rate"]:
             lines.append(f"  Max HR:        {int(r['max_heart_rate'])} bpm")
+        if r.get("temperature") is not None:
+            lines.append(f"  Temperature:   {r['temperature']}°C")
 
         streams = r.get("streams")
+
+        if streams and streams.get("hr_zones"):
+            lines.append("")
+            lines.append("  HR Zones:")
+            for z in streams["hr_zones"]:
+                mins, secs = divmod(z["seconds"], 60)
+                lines.append(f"    {z['zone']} ({z['range']:>7}):  {mins}m {secs:02d}s  ({z['pct']:2d}%)")
 
         if streams and streams.get("minute_paces"):
             lines.append("")
@@ -374,18 +431,22 @@ def build_text(runs, summary, generated_at, period_label):
                 lines.append(f"    Min {mp['minute']:3d}:  {mp['pace']}")
 
         if streams and streams.get("ten_second_marks"):
-            marks    = streams["ten_second_marks"]
-            has_hr   = any("heartrate"   in m for m in marks)
-            has_elev = any("elevation_m" in m for m in marks)
+            marks      = streams["ten_second_marks"]
+            has_hr     = any("heartrate"   in m for m in marks)
+            has_elev   = any("elevation_m" in m for m in marks)
+            has_pace   = any("pace"        in m for m in marks)
+            has_cad    = any("cadence"     in m for m in marks)
+            has_moving = any("moving"      in m for m in marks)
 
-            if has_hr or has_elev:
+            if has_hr or has_elev or has_pace or has_cad or has_moving:
                 lines.append("")
-                lines.append("  Heart Rate & Elevation (every 10s):")
+                lines.append("  Detail (every 10s):")
                 col_heads = ["  Elapsed"]
-                if has_hr:
-                    col_heads.append("   HR")
-                if has_elev:
-                    col_heads.append("   Elevation")
+                if has_hr:     col_heads.append("   HR")
+                if has_elev:   col_heads.append("   Elevation")
+                if has_pace:   col_heads.append("      Pace")
+                if has_cad:    col_heads.append("  Cadence")
+                if has_moving: col_heads.append("  Mvg")
                 lines.append("  " + "  ".join(col_heads).strip())
 
                 for mark in marks:
@@ -397,6 +458,15 @@ def build_text(runs, summary, generated_at, period_label):
                     if has_elev:
                         el_val = mark.get("elevation_m")
                         row += f"   {el_val:7.1f} m" if el_val is not None else "         ---"
+                    if has_pace:
+                        pace_val = mark.get("pace")
+                        row += f"  {pace_val:>8}" if pace_val else "       ---"
+                    if has_cad:
+                        cad_val = mark.get("cadence")
+                        row += f"  {cad_val:3d} spm" if cad_val is not None else "      ---"
+                    if has_moving:
+                        mvg = mark.get("moving")
+                        row += f"  {'Y' if mvg else 'N'}" if mvg is not None else "  -"
                     lines.append(row)
 
         lines.append("")
@@ -469,6 +539,9 @@ def main():
         for i, run in enumerate(runs_with_streams, 1):
             print(f"  [{i}/{len(runs_with_streams)}] {run['name']}", end="\r")
             run["streams"] = process_streams(fetch_streams(session, run["id"]))
+            detail = fetch_activity_detail(session, run["id"])
+            if detail:
+                run["temperature"] = detail.get("average_temp")
             if i < len(runs_with_streams):
                 time.sleep(STREAM_DELAY)
         print()
